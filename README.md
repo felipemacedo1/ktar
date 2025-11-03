@@ -22,7 +22,7 @@ Um aplicativo Android profissional e seguro para conexão SSH a servidores remot
 
 - ✅ **Conexões SSH seguras** usando [SSHJ](https://github.com/hierynomus/sshj)
 - ✅ **Autenticação múltipla**: senha ou chave pública (RSA/ED25519)
-- ✅ **Terminal SSH real** com shell persistente e PTY (v1.4.0)
+- ✅ **Terminal SSH real** com shell persistente e PTY
 - ✅ **Output em tempo real** via streaming adaptativo
 - ✅ **Estado persistente** - comandos cd, export, variáveis mantidos
 - ✅ **Comandos longos** - tail -f, top -b, watch funcionam
@@ -63,7 +63,7 @@ For detailed setup, see [docs/INSTALL.md](docs/INSTALL.md)
 - 🏗️ **[Architecture](ARCHITECTURE.md)** - Technical overview
 - 🤝 **[Contributing](CONTRIBUTING.md)** - How to contribute
 - ❓ **[FAQ](docs/FAQ.md)** - Common questions
-- 🔄 **[Migration Guide](docs/MIGRATION.md)** - Upgrading from v1.4.1
+- 🔄 **[Migration Guide](docs/MIGRATION.md)** - Version upgrade guide
 - 🔐 **[Security Policy](SECURITY.md)** - Security & vulnerabilities
 
 ## 🛠️ Stack Tecnológica
@@ -264,33 +264,42 @@ Este projeto usa [Conventional Commits](https://www.conventionalcommits.org/):
 
 ## 📝 Roadmap
 
-### ✅ v1.4.0 - Terminal PTY Real (Concluído)
-- ✅ Shell persistente com PTY
-- ✅ Output streaming em tempo real
-- ✅ Estado mantido entre comandos (cd, export)
-- ✅ Comandos longos suportados (tail -f, top -b)
-- ✅ Buffer gerenciado (10k linhas)
-- ✅ Polling adaptativo para economia de bateria
+### 🚧 v1.0.0-beta1 - Current Beta Release
+- ✅ Core SSH functionality
+- ✅ Terminal with PTY support
+- ✅ Host management with encryption
+- ✅ Material 3 UI
+- 🔄 Security audit in progress
+- 🔄 Bug fixes and stability improvements
 
-### 🔜 Próximas Versões
+### 🎯 v1.0.0 - Official Stable Release (When Ready)
+**Critérios para lançamento:**
+- [ ] ✅ **Segurança**: Todas vulnerabilidades críticas corrigidas
+- [ ] ✅ **Funcionalidade**: Todas features principais estáveis
+- [ ] ✅ **Qualidade**: Zero bugs críticos conhecidos
+- [ ] ✅ **Testes**: Cobertura de testes adequada
+- [ ] ✅ **Performance**: Otimizações implementadas
+- [ ] ✅ **Documentação**: Completa e atualizada
 
-#### v1.5.0 - Teclas Especiais (Planejado)
+**A versão oficial será lançada apenas quando a aplicação estiver completamente segura, funcional e livre de bugs.**
+
+#### v1.1.0 - Enhanced Features (Planned)
 - [ ] Suporte a setas ↑↓ (histórico de comandos)
 - [ ] Backspace e edição de linha
 - [ ] Ctrl+C para interromper comandos
 - [ ] Tab completion
 
-#### v1.6.0 - Parser ANSI (Planejado)
-- [ ] Cores ANSI no terminal
-- [ ] Formatação (negrito, itálico)
-- [ ] Clear screen suportado
-- [ ] Posicionamento de cursor
+#### v1.2.0 - Advanced Terminal (Planned)
+- [ ] ANSI color support
+- [ ] Command history with arrow keys
+- [ ] Tab completion
+- [ ] Ctrl+C interrupt support
 
-#### v2.0.0 - Terminal Completo (Visão)
-- [ ] Editores full-screen (vi, vim, nano)
-- [ ] Múltiplas abas/sessões
-- [ ] Snippet manager
-- [ ] Gravação de sessões
+#### v2.0.0 - Professional Features (Vision)
+- [ ] SFTP file transfer
+- [ ] SSH tunneling
+- [ ] Multiple sessions/tabs
+- [ ] Session recording
 
 ### Outras Features
 - [ ] Suporte a SFTP para transferência de arquivos
@@ -317,4 +326,4 @@ Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para ma
 
 ---
 
-**⚠️ Aviso**: Este aplicativo é fornecido "como está", sem garantias. Use por sua conta e risco. Sempre verifique as chaves de host ao conectar a servidores pela primeira vez.
+**⚠️ Aviso Beta**: Esta é uma versão beta em desenvolvimento ativo. Embora funcional, pode conter bugs e vulnerabilidades. A versão oficial (v1.0.0) será lançada apenas após auditoria completa de segurança e correção de todos os problemas identificados. Use por sua conta e risco.

@@ -14,7 +14,7 @@ import java.io.IOException
 
 /**
  * Manages SFTP operations using an existing SSH session.
- * Handles file listing, upload, and download operations.
+ * Handles file listing, upload, and download operations with security validation.
  */
 class SFTPManager(private val session: SSHSession) {
 
@@ -23,6 +23,22 @@ class SFTPManager(private val session: SSHSession) {
     companion object {
         private const val TAG = "SFTP"
         private const val BUFFER_SIZE = 32768 // 32KB buffer for transfers
+        
+        // File upload security constraints
+        private val ALLOWED_EXTENSIONS = setOf(
+            "txt", "log", "conf", "config", "sh", "py", "kt", "java",
+            "json", "xml", "yaml", "yml", "sql", "csv", "md", "rst",
+            "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+            "zip", "tar", "gz", "rar", "7z", "sh", "bash"
+        )
+        private const val MAX_FILE_SIZE = 500 * 1024 * 1024 // 500MB
+        
+        // Patterns to detect directory traversal and invalid paths
+        private val FORBIDDEN_PATTERNS = listOf(
+            Regex("\\.\\.[\\\\/]"),  // Directory traversal ../ or ..\
+            Regex("^[\\\\/]"),       // Absolute paths starting with / or \
+            Regex("[<>:\"|?*\\x00]") // Invalid filename characters
+        )
     }
 
     /**
@@ -51,6 +67,53 @@ class SFTPManager(private val session: SSHSession) {
     }
 
     /**
+     * Validates a file path for security issues (directory traversal, etc).
+     */
+    private fun validateFilePath(path: String): Result<String> {
+        // Check for directory traversal and invalid characters
+        if (FORBIDDEN_PATTERNS.any { it.containsMatchIn(path) }) {
+            return Result.failure(IllegalArgumentException("Invalid path: contains forbidden characters or traversal patterns"))
+        }
+
+        // Extract just the filename from the path
+        val filename = path.substringAfterLast("/").substringAfterLast("\\")
+        
+        // Check for hidden files/configs (starts with dot)
+        if (filename.startsWith(".")) {
+            return Result.failure(IllegalArgumentException("Hidden files are not allowed"))
+        }
+
+        // Filename must not be empty
+        if (filename.isEmpty()) {
+            return Result.failure(IllegalArgumentException("Invalid filename"))
+        }
+
+        return Result.success(filename)
+    }
+
+    /**
+     * Validates file before upload (size, extension, etc).
+     */
+    private fun validateFileUpload(filename: String, size: Long): Result<Unit> {
+        // Check file size
+        if (size > MAX_FILE_SIZE) {
+            return Result.failure(
+                IllegalArgumentException("File size ${size / (1024 * 1024)}MB exceeds limit of ${MAX_FILE_SIZE / (1024 * 1024)}MB")
+            )
+        }
+
+        // Check file extension against whitelist
+        val extension = filename.substringAfterLast(".", "").lowercase()
+        if (extension.isEmpty() || extension !in ALLOWED_EXTENSIONS) {
+            return Result.failure(
+                IllegalArgumentException("File type .$extension is not allowed")
+            )
+        }
+
+        return Result.success(Unit)
+    }
+
+    /**
      * Lists files and directories in the specified remote path.
      * @param remotePath Remote directory path to list
      * @return List of SFTPFile objects
@@ -76,7 +139,7 @@ class SFTPManager(private val session: SSHSession) {
     }
 
     /**
-     * Uploads a local file to the remote server.
+     * Uploads a local file to the remote server with security validation.
      * @param localPath Local file path
      * @param remotePath Remote destination path
      * @param progressListener Optional progress listener
@@ -103,9 +166,23 @@ class SFTPManager(private val session: SSHSession) {
                 return@withContext SFTPResult.Error("Cannot read local file: $localPath")
             }
 
+            // Validate remote path for directory traversal and injection attacks
+            val pathValidation = validateFilePath(remotePath)
+            if (pathValidation.isFailure) {
+                Log.e("SFTP_UPLOAD", "Invalid remote path: ${pathValidation.exceptionOrNull()?.message}")
+                return@withContext SFTPResult.Error("Invalid remote path: ${pathValidation.exceptionOrNull()?.message}")
+            }
+
+            // Validate file size and extension
+            val uploadValidation = validateFileUpload(localFile.name, localFile.length())
+            if (uploadValidation.isFailure) {
+                Log.e("SFTP_UPLOAD", "Upload validation failed: ${uploadValidation.exceptionOrNull()?.message}")
+                return@withContext SFTPResult.Error("Upload validation failed: ${uploadValidation.exceptionOrNull()?.message}")
+            }
+
             Log.d("SFTP_UPLOAD", "Uploading $localPath to $remotePath (${localFile.length()} bytes)")
 
-            // Use SSHJ's put method without TransferListener (simpler approach)
+            // Use SSHJ's put method
             client.put(FileSystemFile(localFile), remotePath)
             
             Log.d("SFTP_UPLOAD", "Upload completed: $remotePath")
@@ -117,7 +194,7 @@ class SFTPManager(private val session: SSHSession) {
     }
 
     /**
-     * Downloads a remote file to the local device.
+     * Downloads a remote file to the local device with restricted permissions.
      * @param remotePath Remote file path
      * @param localPath Local destination path
      * @param progressListener Optional progress listener
@@ -153,8 +230,17 @@ class SFTPManager(private val session: SSHSession) {
 
             Log.d("SFTP_DOWNLOAD", "Downloading $remotePath to $localPath (${attrs.size} bytes)")
 
-            // Use SSHJ's get method without TransferListener (simpler approach)
+            // Use SSHJ's get method
             client.get(remotePath, FileSystemFile(localFile))
+            
+            // Set restrictive permissions: owner read/write only (0600)
+            // This prevents other apps from reading sensitive downloaded files
+            val canSetReadable = localFile.setReadable(true, true)  // owner-only readable
+            val canSetWritable = localFile.setWritable(true, true)  // owner-only writable
+            
+            if (!canSetReadable || !canSetWritable) {
+                Log.w("SFTP_DOWNLOAD", "Could not set restrictive permissions on $localPath")
+            }
             
             Log.d("SFTP_DOWNLOAD", "Download completed: $localPath")
             SFTPResult.Success("File downloaded successfully to ${localFile.name}")

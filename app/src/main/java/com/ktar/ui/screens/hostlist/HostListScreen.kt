@@ -10,6 +10,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ktar.R
@@ -17,7 +19,9 @@ import com.ktar.data.model.Host
 import com.ktar.ui.components.ConfirmDialog
 import com.ktar.ui.components.ErrorDialog
 import com.ktar.ui.components.HostCard
+import com.ktar.ui.components.HostListLoadingState
 import com.ktar.ui.components.KTARHeader
+import kotlinx.coroutines.launch
 
 /**
  * Host list screen wrapper for navigation.
@@ -62,6 +66,17 @@ fun HostListScreenContent(
     val uiState by viewModel.uiState.collectAsState()
     var hostToDelete by remember { mutableStateOf<Host?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showThemeDialog by remember { mutableStateOf(false) }
+    
+    // Get user preferences for theme toggle
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val preferencesRepository = remember { 
+        com.ktar.data.preferences.UserPreferencesRepository.getInstance(context)
+    }
+    val userPreferences by preferencesRepository.userPreferencesFlow.collectAsState(
+        initial = com.ktar.data.preferences.UserPreferences()
+    )
+    val coroutineScope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
@@ -70,7 +85,14 @@ fun HostListScreenContent(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     titleContentColor = MaterialTheme.colorScheme.onPrimary
-                )
+                ),
+                actions = {
+                    // Theme toggle button
+                    com.ktar.ui.components.ThemeToggleButton(
+                        currentTheme = userPreferences.themeMode,
+                        onClick = { showThemeDialog = true }
+                    )
+                }
             )
         },
         bottomBar = {
@@ -91,11 +113,15 @@ fun HostListScreenContent(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onAddHost,
-                containerColor = MaterialTheme.colorScheme.primary
+                containerColor = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.semantics {
+                    contentDescription = "Adicionar nova conexão SSH"
+                }
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
-                    contentDescription = stringResource(R.string.host_list_add_connection)
+                    contentDescription = null, // Handled by FAB semantics
+                    modifier = Modifier.size(24.dp) // Ensure minimum touch target
                 )
             }
         }
@@ -107,9 +133,13 @@ fun HostListScreenContent(
         ) {
             when (val state = uiState) {
                 is HostListUiState.Loading -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center)
-                    )
+                    // Show skeleton loading state instead of spinner
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        KTARHeader()
+                        HostListLoadingState(
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                    }
                 }
 
                 is HostListUiState.Empty -> {
@@ -194,6 +224,19 @@ fun HostListScreenContent(
             title = "Error",
             message = message,
             onDismiss = { errorMessage = null }
+        )
+    }
+    
+    // Theme selection dialog
+    if (showThemeDialog) {
+        com.ktar.ui.components.ThemeToggleDialog(
+            currentTheme = userPreferences.themeMode,
+            onThemeSelected = { newTheme ->
+                coroutineScope.launch {
+                    preferencesRepository.updateThemeMode(newTheme)
+                }
+            },
+            onDismiss = { showThemeDialog = false }
         )
     }
 }

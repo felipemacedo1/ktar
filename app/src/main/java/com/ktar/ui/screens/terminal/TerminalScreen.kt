@@ -20,10 +20,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
@@ -88,11 +91,16 @@ fun TerminalScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = {
-                        viewModel.disconnect()
-                        onNavigateBack()
-                    }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Voltar")
+                    IconButton(
+                        onClick = {
+                            viewModel.disconnect()
+                            onNavigateBack()
+                        },
+                        modifier = Modifier.semantics {
+                            contentDescription = "Voltar e desconectar"
+                        }
+                    ) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = null)
                     }
                 },
                 actions = {
@@ -100,14 +108,23 @@ fun TerminalScreen(
                     if (uiState.isConnected) {
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
-                            contentDescription = "Conectado",
+                            contentDescription = "Status: Conectado ao servidor ${uiState.hostName}",
                             tint = Color(0xFF4CAF50), // Green
-                            modifier = Modifier.padding(end = 8.dp)
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .semantics {
+                                    contentDescription = "Conexão ativa com ${uiState.hostName}"
+                                }
                         )
                     }
                     
-                    IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Menu")
+                    IconButton(
+                        onClick = { showMenu = true },
+                        modifier = Modifier.semantics {
+                            contentDescription = "Abrir menu de opções"
+                        }
+                    ) {
+                        Icon(Icons.Default.MoreVert, contentDescription = null)
                     }
                     DropdownMenu(
                         expanded = showMenu,
@@ -220,11 +237,13 @@ fun TerminalScreen(
 
             Divider()
 
-            // Command input
+            // Command input with history navigation
             TerminalInput(
                 command = uiState.currentCommand,
                 onCommandChange = { viewModel.updateCommand(it) },
                 onExecute = { viewModel.executeCommand() },
+                onHistoryUp = { viewModel.navigateHistoryUp() },
+                onHistoryDown = { viewModel.navigateHistoryDown() },
                 enabled = uiState.isConnected && !uiState.isExecuting,
                 prompt = uiState.prompt
             )
@@ -252,22 +271,34 @@ private fun TerminalLineItem(line: TerminalLine) {
             text = line.text,
             style = TextStyle(
                 fontFamily = FontFamily.Monospace,
-                fontSize = 14.sp,
+                fontSize = 16.sp, // Increased from 14sp for better readability
                 color = color
             ),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics {
+                    // Accessibility: Announce line type to screen readers
+                    contentDescription = when (line.type) {
+                        TerminalLineType.COMMAND -> "Command: ${line.text}"
+                        TerminalLineType.OUTPUT -> "Output: ${line.text}"
+                        TerminalLineType.ERROR -> "Error: ${line.text}"
+                        TerminalLineType.SYSTEM -> "System: ${line.text}"
+                    }
+                }
         )
     }
 }
 
 /**
- * Terminal input component.
+ * Terminal input component with command history navigation.
  */
 @Composable
 private fun TerminalInput(
     command: String,
     onCommandChange: (String) -> Unit,
     onExecute: () -> Unit,
+    onHistoryUp: () -> Unit = {},
+    onHistoryDown: () -> Unit = {},
     enabled: Boolean,
     prompt: String
 ) {
@@ -277,75 +308,138 @@ private fun TerminalInput(
         focusRequester.requestFocus()
     }
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = prompt,
-            style = TextStyle(
-                fontFamily = FontFamily.Monospace,
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.primary
-            )
-        )
-
-        BasicTextField(
-            value = command,
-            onValueChange = onCommandChange,
+        Row(
             modifier = Modifier
-                .weight(1f)
-                .focusRequester(focusRequester),
-            enabled = enabled,
-            textStyle = TextStyle(
-                fontFamily = FontFamily.Monospace,
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurface
-            ),
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-            keyboardOptions = KeyboardOptions(
-                imeAction = ImeAction.Send
-            ),
-            keyboardActions = KeyboardActions(
-                onSend = { onExecute() }
-            ),
-            singleLine = true,
-            decorationBox = { innerTextField ->
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    if (command.isEmpty()) {
-                        Text(
-                            text = "Digite um comando...",
-                            style = TextStyle(
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 14.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                            )
-                        )
-                    }
-                    innerTextField()
-                }
-            }
-        )
-        
-        // Send button
-        IconButton(
-            onClick = onExecute,
-            enabled = enabled && command.isNotEmpty()
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Default.Send,
-                contentDescription = "Enviar comando",
-                tint = if (enabled && command.isNotEmpty()) 
-                    MaterialTheme.colorScheme.primary 
-                else 
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+            Text(
+                text = prompt,
+                style = TextStyle(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
             )
+
+            BasicTextField(
+                value = command,
+                onValueChange = onCommandChange,
+                modifier = Modifier
+                    .weight(1f)
+                    .focusRequester(focusRequester),
+                enabled = enabled,
+                textStyle = TextStyle(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                keyboardOptions = KeyboardOptions(
+                    imeAction = ImeAction.Send
+                ),
+                keyboardActions = KeyboardActions(
+                    onSend = { onExecute() }
+                ),
+                singleLine = true,
+                decorationBox = { innerTextField ->
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        if (command.isEmpty()) {
+                            Text(
+                                text = "Digite um comando...",
+                                style = TextStyle(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 16.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                )
+                            )
+                        }
+                        innerTextField()
+                    }
+                }
+            )
+            
+            // Send button
+            IconButton(
+                onClick = onExecute,
+                enabled = enabled && command.isNotEmpty()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Send,
+                    contentDescription = "Enviar comando",
+                    tint = if (enabled && command.isNotEmpty()) 
+                        MaterialTheme.colorScheme.primary 
+                    else 
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                )
+            }
+        }
+        
+        // History navigation buttons
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Up arrow - Previous command
+            OutlinedButton(
+                onClick = onHistoryUp,
+                enabled = enabled,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(40.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = "Comando anterior",
+                    modifier = Modifier
+                        .size(16.dp)
+                        .rotate(90f) // Rotate to point up
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    "Anterior",
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+            
+            // Down arrow - Next command
+            OutlinedButton(
+                onClick = onHistoryDown,
+                enabled = enabled,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(40.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = "Próximo comando",
+                    modifier = Modifier
+                        .size(16.dp)
+                        .rotate(270f) // Rotate to point down
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    "Próximo",
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
         }
     }
 }

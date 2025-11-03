@@ -10,6 +10,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ktar.data.model.Host
@@ -36,7 +40,11 @@ fun HostCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "SSH host ${host.name}, ${host.username}@${host.host}:${host.port}"
+                role = Role.Button
+            },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
@@ -47,7 +55,7 @@ fun HostCard(
         ) {
             Icon(
                 imageVector = Icons.Default.Computer,
-                contentDescription = null,
+                contentDescription = "SSH host icon",
                 modifier = Modifier.size(40.dp),
                 tint = MaterialTheme.colorScheme.primary
             )
@@ -84,18 +92,28 @@ fun HostCard(
                 }
             }
 
-            IconButton(onClick = onEdit) {
+            IconButton(
+                onClick = onEdit,
+                modifier = Modifier.semantics {
+                    contentDescription = "Edit connection ${host.name}"
+                }
+            ) {
                 Icon(
                     imageVector = Icons.Default.Edit,
-                    contentDescription = "Edit",
+                    contentDescription = null, // Handled by button semantics
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
 
-            IconButton(onClick = onDelete) {
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.semantics {
+                    contentDescription = "Delete connection ${host.name}"
+                }
+            ) {
                 Icon(
                     imageVector = Icons.Default.Delete,
-                    contentDescription = "Delete",
+                    contentDescription = null, // Handled by button semantics
                     tint = MaterialTheme.colorScheme.error
                 )
             }

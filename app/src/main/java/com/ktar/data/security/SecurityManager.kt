@@ -4,6 +4,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import java.security.KeyStore
+import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -65,6 +66,16 @@ class SecurityManager {
     }
 
     /**
+     * Generates a cryptographically secure IV for AES-GCM.
+     * Uses 12 bytes (96 bits) as per NIST SP 800-38D specifications.
+     */
+    private fun generateSecureIV(): ByteArray {
+        val iv = ByteArray(12) // GCM standard IV size: 96 bits
+        SecureRandom().nextBytes(iv)
+        return iv
+    }
+
+    /**
      * Encrypts the given data.
      *
      * @param data Plain text data to encrypt
@@ -74,9 +85,10 @@ class SecurityManager {
         if (data.isEmpty()) return ""
 
         val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, getMasterKey())
+        val iv = generateSecureIV()
+        val spec = GCMParameterSpec(GCM_TAG_LENGTH, iv)
+        cipher.init(Cipher.ENCRYPT_MODE, getMasterKey(), spec)
 
-        val iv = cipher.iv
         val encryptedBytes = cipher.doFinal(data.toByteArray(Charsets.UTF_8))
 
         // Combine IV and encrypted data

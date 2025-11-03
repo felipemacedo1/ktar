@@ -1,5 +1,6 @@
 package com.ktar.ui
 
+import android.app.Application
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -34,7 +35,8 @@ class ViewModelFactory(
                 HostListViewModel(hostDataStore) as T
             }
             modelClass.isAssignableFrom(TerminalViewModel::class.java) -> {
-                TerminalViewModel() as T
+                // TerminalViewModel now extends AndroidViewModel
+                TerminalViewModel(context.applicationContext as Application) as T
             }
             modelClass.isAssignableFrom(SFTPViewModel::class.java) -> {
                 SFTPViewModel(sessionManager) as T

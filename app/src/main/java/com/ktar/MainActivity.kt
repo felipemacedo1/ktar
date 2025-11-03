@@ -7,6 +7,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -14,6 +16,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.navigation.NavType
+import com.ktar.data.preferences.UserPreferencesRepository
 import com.ktar.ui.ViewModelFactory
 import com.ktar.ui.screens.connection.ConnectionScreen
 import com.ktar.ui.screens.connection.ConnectionViewModel
@@ -31,13 +34,19 @@ import com.ktar.ui.theme.AndroidSSHTerminalTheme
 class MainActivity : ComponentActivity() {
     
     private val viewModelFactory by lazy { ViewModelFactory(applicationContext) }
+    private val preferencesRepository by lazy { UserPreferencesRepository.getInstance(applicationContext) }
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         
         setContent {
-            AndroidSSHTerminalTheme {
+            // Collect user preferences for theme
+            val userPreferences by preferencesRepository.userPreferencesFlow.collectAsState(
+                initial = com.ktar.data.preferences.UserPreferences()
+            )
+            
+            AndroidSSHTerminalTheme(themeMode = userPreferences.themeMode) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background

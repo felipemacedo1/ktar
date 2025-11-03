@@ -1,11 +1,13 @@
 package com.ktar.ui.screens.terminal
 
+import android.app.Application
 import android.util.Log
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.ktar.data.model.CommandResult
 import com.ktar.ssh.SSHManager
 import com.ktar.ssh.SSHSession
+import com.ktar.utils.CommandHistoryManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,26 +24,89 @@ import java.util.*
  * Supports both standard command execution (exec) and persistent shell mode (PTY).
  * 
  * v1.4.0: Added persistent shell with real-time streaming output.
+ * v1.4.2: Added command history with up/down navigation.
  */
-class TerminalViewModel : ViewModel() {
+class TerminalViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(TerminalUiState())
     val uiState: StateFlow<TerminalUiState> = _uiState.asStateFlow()
 
     private var sshSession: SSHSession? = null
     private val sshManager = SSHManager()
+    
+    // Command history manager
+    private val commandHistory = CommandHistoryManager.getInstance(application)
 
     private val dateFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
     
     // Persistent shell support
     private var outputPollingJob: Job? = null
     private var pollInterval = 100L // Adaptive polling interval
+    
+    // Command rate limiting
+    private var lastCommandTime = 0L
+    private var commandCount = 0
 
     companion object {
         private const val TAG = "TerminalViewModel"
         private const val MAX_OUTPUT_LINES = 10000
         private const val MIN_POLL_INTERVAL = 50L
         private const val MAX_POLL_INTERVAL = 500L
+        private const val MAX_COMMAND_LENGTH = 10000
+        private const val MAX_COMMANDS_PER_SECOND = 10
+    }
+
+    /**
+     * Validates SSH session is still connected.
+     */
+    private fun validateSession(): Result<SSHSession> {
+        val session = sshSession
+        if (session == null) {
+            return Result.failure(IllegalStateException("SSH session not connected"))
+        }
+        
+        if (!session.isConnected()) {
+            return Result.failure(IllegalStateException("SSH session disconnected"))
+        }
+        
+        return Result.success(session)
+    }
+
+    /**
+     * Checks if command execution rate limit is exceeded.
+     */
+    private fun isCommandRateLimited(): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - lastCommandTime > 1000) {
+            commandCount = 0
+            lastCommandTime = now
+        }
+        commandCount++
+        return commandCount > MAX_COMMANDS_PER_SECOND
+    }
+
+    /**
+     * Validates command before execution (CWE-94 prevention).
+     */
+    private fun validateCommand(command: String): Result<String> {
+        val trimmed = command.trim()
+        
+        // Check command length to prevent buffer overflow
+        if (trimmed.length > MAX_COMMAND_LENGTH) {
+            return Result.failure(IllegalArgumentException("Command exceeds maximum length of $MAX_COMMAND_LENGTH characters"))
+        }
+
+        // Check for command rate limiting to prevent DoS
+        if (isCommandRateLimited()) {
+            return Result.failure(IllegalArgumentException("Command rate limit exceeded ($MAX_COMMANDS_PER_SECOND per second)"))
+        }
+
+        // Commands must not be empty
+        if (trimmed.isBlank()) {
+            return Result.failure(IllegalArgumentException("Command cannot be empty"))
+        }
+
+        return Result.success(trimmed)
     }
 
     /**
@@ -202,6 +267,26 @@ class TerminalViewModel : ViewModel() {
      */
     fun updateCommand(command: String) {
         _uiState.update { it.copy(currentCommand = command) }
+        // Reset history navigation when user types
+        commandHistory.resetNavigation()
+    }
+    
+    /**
+     * Navigate to previous command in history (Up arrow).
+     */
+    fun navigateHistoryUp() {
+        val previousCommand = commandHistory.navigateUp()
+        if (previousCommand != null) {
+            _uiState.update { it.copy(currentCommand = previousCommand) }
+        }
+    }
+    
+    /**
+     * Navigate to next command in history (Down arrow).
+     */
+    fun navigateHistoryDown() {
+        val nextCommand = commandHistory.navigateDown()
+        _uiState.update { it.copy(currentCommand = nextCommand) }
     }
 
     /**
@@ -212,11 +297,15 @@ class TerminalViewModel : ViewModel() {
         val command = _uiState.value.currentCommand.trim()
         if (command.isEmpty()) return
 
-        val session = sshSession
-        if (session == null) {
-            addErrorMessage("Sessão SSH não conectada")
+        // Validate session is connected
+        val sessionValidation = validateSession()
+        if (sessionValidation.isFailure) {
+            addErrorMessage("Session error: ${sessionValidation.exceptionOrNull()?.message}")
+            _uiState.update { it.copy(isConnected = false) }
             return
         }
+
+        val session = sessionValidation.getOrNull() ?: return
 
         // Handle exit command
         if (command.equals("exit", ignoreCase = true)) {
@@ -231,15 +320,25 @@ class TerminalViewModel : ViewModel() {
             return
         }
 
+        // Validate command format and rate limiting
+        val commandValidation = validateCommand(command)
+        if (commandValidation.isFailure) {
+            addErrorMessage("Invalid command: ${commandValidation.exceptionOrNull()?.message}")
+            _uiState.update { it.copy(currentCommand = "") }
+            return
+        }
+
+        val validatedCommand = commandValidation.getOrNull() ?: return
+
         // Clear input
         _uiState.update { it.copy(currentCommand = "") }
 
         if (_uiState.value.shellMode) {
             // Shell mode: send to persistent shell
-            executeCommandInShell(session, command)
+            executeCommandInShell(session, validatedCommand)
         } else {
             // Exec mode: traditional one-shot execution
-            executeCommandWithExec(session, command)
+            executeCommandWithExec(session, validatedCommand)
         }
     }
     
@@ -250,10 +349,15 @@ class TerminalViewModel : ViewModel() {
         // Add command to output (local echo)
         addCommandMessage(command)
         
+        // Add to history
+        viewModelScope.launch {
+            commandHistory.addCommand(command)
+        }
+        
         viewModelScope.launch {
             try {
                 session.sendToShell(command)
-                Log.d("SSH_CMD", "Command sent to shell: $command")
+                Log.d("SSH_CMD", "Command sent to shell")
             } catch (e: Exception) {
                 Log.e(TAG, "Error sending command to shell", e)
                 addErrorMessage("❌ Erro ao enviar comando: ${e.message}")
@@ -267,6 +371,11 @@ class TerminalViewModel : ViewModel() {
     private fun executeCommandWithExec(session: SSHSession, command: String) {
         // Add command to output
         addCommandMessage(command)
+        
+        // Add to history
+        viewModelScope.launch {
+            commandHistory.addCommand(command)
+        }
 
         // Check if command requires PTY and warn user
         if (!_uiState.value.ptyEnabled && session.isInteractiveCommand(command)) {
