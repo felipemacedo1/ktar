@@ -1,6 +1,4 @@
-# >_KTAR
-
-⚡ **KTAR  in a connection.**
+### >_ **KTAR  in a connection.**
 
 [![Android](https://img.shields.io/badge/Platform-Android-green.svg)](https://www.android.com/)
 [![Kotlin](https://img.shields.io/badge/Language-Kotlin-blue.svg)](https://kotlinlang.org/)
@@ -16,7 +14,8 @@
 [![Bugs](https://sonarcloud.io/api/project_badges/measure?project=felipemacedo1_ktar&metric=bugs)](https://sonarcloud.io/summary/new_code?id=felipemacedo1_ktar)
 [![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=felipemacedo1_ktar&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=felipemacedo1_ktar)
 
-Um aplicativo Android profissional e seguro para conexão SSH a servidores remotos, com interface moderna em Jetpack Compose e autenticação robusta.
+---
+Um aplicativo Android para conexão SSH a servidores remotos, com interface moderna em Jetpack Compose e autenticação robusta.
 
 ## 🚀 Características
 
